@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/ASUS/AndroidStudioProjects/Workflow-CI/MLProject/mlruns/0/f767d34a845a40d4b9df25ccc53a30ca/artifacts
+end_time: 1762619075718
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: f767d34a845a40d4b9df25ccc53a30ca
+run_name: angry-croc-249
+run_uuid: f767d34a845a40d4b9df25ccc53a30ca
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762619068431
+status: 3
+tags: []
+user_id: runner
