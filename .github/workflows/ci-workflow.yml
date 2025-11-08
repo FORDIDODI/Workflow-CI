@@ -28,31 +28,58 @@ jobs:
       - name: Install MLflow and Dependencies
         run: |
           pip install mlflow==2.19.0
-          pip install pandas numpy scikit-learn
+          pip install pandas==2.1.1 numpy==1.24.3 scikit-learn==1.3.0
+          
+      # ========== PREPARE MLFLOW DIRECTORY ==========
+      - name: Setup MLflow Directory
+        run: |
+          cd MLProject
+          mkdir -p mlruns
+          chmod -R 777 mlruns
           
       # ========== RUN MLFLOW PROJECT ==========
       - name: Train Model with MLflow Project
         run: |
           cd MLProject
-          mlflow run . --env-manager=local --experiment-name "CI_CD_Experiment"
-        env:
-          MLFLOW_TRACKING_URI: file:///./mlruns
+          # Don't set MLFLOW_TRACKING_URI, let it use default (./mlruns)
+          mlflow run . --env-manager=local
           
       # ========== VERIFY MODEL CREATED ==========
       - name: Verify Model Artifacts
         run: |
+          echo "Checking MLProject directory..."
+          ls -la MLProject/
+          
           if [ -d "MLProject/mlruns" ]; then
-            echo "MLruns folder created"
+            echo "MLruns folder found"
             ls -la MLProject/mlruns/
             
-            # Find latest run
-            LATEST_RUN=$(ls -t MLProject/mlruns/0/ | grep -v "meta.yaml" | head -1)
-            echo "Latest run ID: $LATEST_RUN"
-            
-            if [ -d "MLProject/mlruns/0/$LATEST_RUN/artifacts/model" ]; then
-              echo "Model artifact found!"
+            # Check if experiment folder exists
+            if [ -d "MLProject/mlruns/0" ]; then
+              echo "Experiment folder found"
+              ls -la MLProject/mlruns/0/
+              
+              # Find latest run (exclude meta.yaml)
+              LATEST_RUN=$(find MLProject/mlruns/0 -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
+              
+              if [ -n "$LATEST_RUN" ]; then
+                echo "Latest run ID: $LATEST_RUN"
+                
+                if [ -d "MLProject/mlruns/0/$LATEST_RUN/artifacts/model" ]; then
+                  echo "Model artifact found at: MLProject/mlruns/0/$LATEST_RUN/artifacts/model"
+                  ls -la "MLProject/mlruns/0/$LATEST_RUN/artifacts/model/"
+                else
+                  echo "Model artifact not found!"
+                  echo "Available artifacts:"
+                  ls -la "MLProject/mlruns/0/$LATEST_RUN/artifacts/" || echo "No artifacts directory"
+                  exit 1
+                fi
+              else
+                echo "No run found in experiment!"
+                exit 1
+              fi
             else
-              echo "Model artifact not found!"
+              echo "Experiment folder not found!"
               exit 1
             fi
           else
@@ -61,28 +88,35 @@ jobs:
           fi
           
       # ========== SAVE ARTIFACTS TO GITHUB ==========
-      - name: Upload Artifacts
+      - name: Upload Artifacts to GitHub Actions
         uses: actions/upload-artifact@v4
         with:
           name: model-artifacts
           path: MLProject/mlruns/
           retention-days: 90
           
-      # ========== COMMIT ARTIFACTS ==========
+      # ========== COMMIT ARTIFACTS TO REPO ==========
       - name: Commit Model Artifacts
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # Create artifacts folder if not exists
+          # Create artifacts folder in root
           mkdir -p artifacts
           
-          # Copy mlruns to artifacts
-          cp -r MLProject/mlruns artifacts/ || true
+          # Copy entire mlruns to artifacts
+          cp -r MLProject/mlruns artifacts/mlruns-$(date +%Y%m%d-%H%M%S) || true
           
-          # Add and commit
+          # Add changes
           git add artifacts/ || true
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update: Model artifacts from run $(date)" && git push)
+          
+          # Commit if there are changes
+          if ! git diff --quiet HEAD; then
+            git commit -m "🤖 Auto-update: Model artifacts from CI/CD pipeline $(date)"
+            git push || echo "Push failed, but continuing..."
+          else
+            echo "No changes to commit"
+          fi
           
       # ========== DOCKER BUILD AND PUSH ==========
       
@@ -99,29 +133,76 @@ jobs:
         id: find_model
         run: |
           cd MLProject
-          LATEST_RUN=$(ls -t mlruns/0/ | grep -v "meta.yaml" | head -1)
-          MODEL_PATH="mlruns/0/$LATEST_RUN/artifacts/model"
-          echo "MODEL_PATH=$MODEL_PATH" >> $GITHUB_OUTPUT
-          echo "Latest model path: $MODEL_PATH"
           
-      - name: Build Docker Image with MLflow
+          # Find the latest run directory
+          LATEST_RUN=$(find mlruns/0 -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
+          
+          if [ -z "$LATEST_RUN" ]; then
+            echo "No run found!"
+            exit 1
+          fi
+          
+          MODEL_PATH="mlruns/0/$LATEST_RUN/artifacts/model"
+          echo "model_path=$MODEL_PATH" >> $GITHUB_OUTPUT
+          echo "Model path: $MODEL_PATH"
+          
+      - name: Create Dockerfile for Model
         run: |
           cd MLProject
-          MODEL_PATH="${{ steps.find_model.outputs.MODEL_PATH }}"
+          MODEL_PATH="${{ steps.find_model.outputs.model_path }}"
           
-          # Build Docker image using mlflow
-          mlflow models build-docker \
-            -m "$MODEL_PATH" \
-            -n "${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest" \
-            --enable-mlserver
-            
+          cat > Dockerfile << 'EOF'
+          FROM python:3.12-slim
+          
+          # Set working directory
+          WORKDIR /app
+          
+          # Install system dependencies
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              build-essential \
+              && rm -rf /var/lib/apt/lists/*
+          
+          # Install Python dependencies
+          RUN pip install --no-cache-dir \
+              mlflow==2.19.0 \
+              pandas==2.1.1 \
+              numpy==1.24.3 \
+              scikit-learn==1.3.0 \
+              gunicorn
+          
+          # Copy model artifacts
+          COPY MODEL_PATH_PLACEHOLDER /app/model
+          
+          # Expose port
+          EXPOSE 5001
+          
+          # Health check
+          HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+            CMD curl -f http://localhost:5001/health || exit 1
+          
+          # Serve model
+          CMD ["mlflow", "models", "serve", "-m", "/app/model", "-h", "0.0.0.0", "-p", "5001", "--no-conda"]
+          EOF
+          
+          # Replace placeholder with actual path
+          sed -i "s|MODEL_PATH_PLACEHOLDER|$MODEL_PATH|g" Dockerfile
+          
+          echo "Dockerfile created"
+          cat Dockerfile
+          
+      - name: Build Docker Image
+        run: |
+          cd MLProject
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest .
+          echo "Docker image built successfully"
+          
       - name: Push Docker Image to Docker Hub
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
+          echo "Docker image pushed to Docker Hub"
           
       - name: Create Docker Hub Link File
         run: |
-          mkdir -p MLProject
           cat > MLProject/docker_hub_link.txt << EOF
           ==========================================
           DOCKER HUB INFORMATION
@@ -129,15 +210,24 @@ jobs:
           
           Docker Image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
           
+          Docker Hub URL:
+          https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model
+          
           Pull Command:
           docker pull ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
           
           Run Command:
-          docker run -p 5001:8080 ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
+          docker run -d -p 5001:5001 --name diabetes-model ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
           
-          Docker Hub URL:
-          https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model
+          Test Health:
+          curl http://localhost:5001/health
           
+          Stop Container:
+          docker stop diabetes-model
+          docker rm diabetes-model
+          
+          ==========================================
+          Created: $(date)
           ==========================================
           EOF
           
@@ -149,14 +239,33 @@ jobs:
           name: docker-info
           path: MLProject/docker_hub_link.txt
           
+      - name: Commit Docker Info
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add MLProject/docker_hub_link.txt || true
+          git diff --quiet HEAD || (git commit -m "Update: Docker Hub link" && git push) || echo "Push failed"
+          
       # ========== FINAL NOTIFICATION ==========
       - name: Success Notification
         if: success()
         run: |
-          echo "================================================"
-          echo "CI/CD PIPELINE BERHASIL!"
-          echo "================================================"
-          echo "Model artifacts saved to GitHub"
-          echo "Docker image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest"
-          echo "Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model"
-          echo "================================================"
+          echo "========================================================"
+          echo "CI/CD PIPELINE COMPLETED SUCCESSFULLY!"
+          echo "========================================================"
+          echo ""
+          echo "Model Artifacts:"
+          echo "   - Saved to GitHub Actions artifacts"
+          echo "   - Committed to repository in 'artifacts/' folder"
+          echo ""
+          echo "Docker Image:"
+          echo "   - Image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest"
+          echo "   - Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model"
+          echo ""
+          echo "Next Steps:"
+          echo "   1. Check Docker Hub for the image"
+          echo "   2. Download docker_hub_link.txt from artifacts"
+          echo "   3. Test the Docker image locally"
+          echo ""
+          echo "========================================================"
