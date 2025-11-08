@@ -62,7 +62,7 @@ jobs:
           
       # ========== SAVE ARTIFACTS TO GITHUB ==========
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: model-artifacts
           path: MLProject/mlruns/
@@ -144,7 +144,7 @@ jobs:
           cat MLProject/docker_hub_link.txt
           
       - name: Upload Docker Info
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-info
           path: MLProject/docker_hub_link.txt
