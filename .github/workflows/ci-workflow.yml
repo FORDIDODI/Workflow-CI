@@ -1,111 +1,162 @@
-name: CI/CD - Model Training Pipeline
+name: CI/CD - Model Training and Docker Build
 
 on:
   push:
     branches:
       - main
-    paths:
-      - 'MLProject/**'
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: write
 
 jobs:
   train-and-deploy:
     runs-on: ubuntu-latest
     
     steps:
-      # Step 1: Checkout code
+      # ========== CHECKOUT CODE ==========
       - name: Checkout Repository
         uses: actions/checkout@v3
         
-      # Step 2: Setup Python
+      # ========== SETUP PYTHON ==========
       - name: Setup Python 3.12
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
           
-      # Step 3: Setup Conda
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          auto-update-conda: true
-          python-version: 3.12
-          
-      # Step 4: Install MLflow
-      - name: Install MLflow
+      # ========== INSTALL MLFLOW ==========
+      - name: Install MLflow and Dependencies
         run: |
           pip install mlflow==2.19.0
+          pip install pandas numpy scikit-learn
           
-      # Step 5: Run MLflow Project
-      - name: Train Model with MLflow
+      # ========== RUN MLFLOW PROJECT ==========
+      - name: Train Model with MLflow Project
         run: |
           cd MLProject
-          mlflow run . --env-manager=local
+          mlflow run . --env-manager=local --experiment-name "CI_CD_Experiment"
+        env:
+          MLFLOW_TRACKING_URI: file:///./mlruns
           
-      # Step 6: Save artifacts to GitHub
-      - name: Save Model Artifacts
+      # ========== VERIFY MODEL CREATED ==========
+      - name: Verify Model Artifacts
         run: |
-          mkdir -p artifacts
-          cp -r mlruns artifacts/ || echo "No mlruns folder"
+          if [ -d "MLProject/mlruns" ]; then
+            echo "✅ MLruns folder created"
+            ls -la MLProject/mlruns/
+            
+            # Find latest run
+            LATEST_RUN=$(ls -t MLProject/mlruns/0/ | grep -v "meta.yaml" | head -1)
+            echo "Latest run ID: $LATEST_RUN"
+            
+            if [ -d "MLProject/mlruns/0/$LATEST_RUN/artifacts/model" ]; then
+              echo "✅ Model artifact found!"
+            else
+              echo "❌ Model artifact not found!"
+              exit 1
+            fi
+          else
+            echo "❌ MLruns folder not created!"
+            exit 1
+          fi
           
-      - name: Upload Artifacts to GitHub
-        uses: actions/upload-artifact@v4
+      # ========== SAVE ARTIFACTS TO GITHUB ==========
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
         with:
           name: model-artifacts
-          path: artifacts/
+          path: MLProject/mlruns/
           retention-days: 90
           
-      # Step 7: Commit artifacts to repo
-      - name: Commit Artifacts
+      # ========== COMMIT ARTIFACTS ==========
+      - name: Commit Model Artifacts
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add artifacts/ || echo "No artifacts to add"
-          git diff --quiet && git diff --staged --quiet || git commit -m "🤖 Auto-update: Model artifacts $(date)"
           
-      - name: Push Changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          # Create artifacts folder if not exists
+          mkdir -p artifacts
           
-      # ===== ADVANCED: BUILD AND PUSH DOCKER IMAGE =====
+          # Copy mlruns to artifacts
+          cp -r MLProject/mlruns artifacts/ || true
+          
+          # Add and commit
+          git add artifacts/ || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Auto-update: Model artifacts from run $(date)" && git push)
+          
+      # ========== DOCKER BUILD AND PUSH ==========
       
-      # Step 8: Login to Docker Hub
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           
-      # Step 9: Build Docker Image with MLflow
-      - name: Build Docker Image
+      - name: Find Latest Model Path
+        id: find_model
         run: |
           cd MLProject
+          LATEST_RUN=$(ls -t mlruns/0/ | grep -v "meta.yaml" | head -1)
+          MODEL_PATH="mlruns/0/$LATEST_RUN/artifacts/model"
+          echo "MODEL_PATH=$MODEL_PATH" >> $GITHUB_OUTPUT
+          echo "Latest model path: $MODEL_PATH"
+          
+      - name: Build Docker Image with MLflow
+        run: |
+          cd MLProject
+          MODEL_PATH="${{ steps.find_model.outputs.MODEL_PATH }}"
+          
+          # Build Docker image using mlflow
           mlflow models build-docker \
-            -m mlruns/0/$(ls mlruns/0 | tail -1)/artifacts/model \
-            -n ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
+            -m "$MODEL_PATH" \
+            -n "${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest" \
+            --enable-mlserver
             
-      # Step 10: Push to Docker Hub
-      - name: Push Docker Image
+      - name: Push Docker Image to Docker Hub
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
           
-      # Step 11: Save Docker Hub Link
-      - name: Save Docker Hub Link
+      - name: Create Docker Hub Link File
         run: |
-          echo "Docker Image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest" > docker_hub_link.txt
-          echo "Pull command: docker pull ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest" >> docker_hub_link.txt
+          mkdir -p MLProject
+          cat > MLProject/docker_hub_link.txt << EOF
+          ==========================================
+          DOCKER HUB INFORMATION
+          ==========================================
+          
+          Docker Image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
+          
+          Pull Command:
+          docker pull ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
+          
+          Run Command:
+          docker run -p 5001:8080 ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest
+          
+          Docker Hub URL:
+          https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model
+          
+          ==========================================
+          EOF
+          
+          cat MLProject/docker_hub_link.txt
           
       - name: Upload Docker Info
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: docker-info
-          path: docker_hub_link.txt
+          path: MLProject/docker_hub_link.txt
           
-      # Step 12: Notification
+      # ========== FINAL NOTIFICATION ==========
       - name: Success Notification
         if: success()
         run: |
-          echo "✅ CI/CD Pipeline berhasil!"
-          echo "📦 Model tersimpan di artifacts"
+          echo "================================================"
+          echo "✅ CI/CD PIPELINE BERHASIL!"
+          echo "================================================"
+          echo "📦 Model artifacts saved to GitHub"
           echo "🐳 Docker image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest"
+          echo "🔗 Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model"
+          echo "================================================"
