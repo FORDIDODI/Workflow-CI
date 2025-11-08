@@ -7,8 +7,11 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import mlflow
 import mlflow.sklearn
 import warnings
+import os
+
 warnings.filterwarnings('ignore')
 
+# === Argument parsing ===
 parser = argparse.ArgumentParser()
 parser.add_argument("--test-size", type=float, default=0.2)
 parser.add_argument("--random-state", type=int, default=42)
@@ -17,7 +20,8 @@ parser.add_argument("--max-depth", type=int, default=10)
 args = parser.parse_args()
 
 print("Loading data...")
-import os
+
+# === Load dataset ===
 if os.path.exists("diabetes_preprocessing.csv"):
     data_path = "diabetes_preprocessing.csv"
 elif os.path.exists("../diabetes_preprocessing.csv"):
@@ -32,43 +36,50 @@ X = df.drop('Outcome', axis=1)
 y = df['Outcome']
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, 
-    test_size=args.test_size, 
-    random_state=args.random_state, 
+    X, y,
+    test_size=args.test_size,
+    random_state=args.random_state,
     stratify=y
 )
 
 print(f"Train: {X_train.shape[0]}, Test: {X_test.shape[0]}")
 
-mlflow.sklearn.autolog()
+# === MLflow tracking ===
+with mlflow.start_run():
+    mlflow.sklearn.autolog()
 
-with mlflow.start_run(nested=True):
+    # Log metadata (gunakan nama unik agar tidak bentrok dengan autolog)
     mlflow.log_param("dataset_name", "diabetes")
-    mlflow.log_param("train_size", len(X_train))
-    mlflow.log_param("test_size_records", len(X_test))  # ganti nama juga agar aman
+    mlflow.log_param("train_records", len(X_train))
+    mlflow.log_param("test_records", len(X_test))
     mlflow.log_param("n_features", X.shape[1])
 
+    print("Training model...")
+    model = RandomForestClassifier(
+        n_estimators=args.n_estimators,
+        max_depth=args.max_depth,
+        random_state=args.random_state,
+        n_jobs=-1
+    )
+    model.fit(X_train, y_train)
 
-print("Training model...")
-model = RandomForestClassifier(
-    n_estimators=args.n_estimators,
-    max_depth=args.max_depth,
-    random_state=args.random_state,
-    n_jobs=-1
-)
+    # === Evaluate ===
+    y_pred_test = model.predict(X_test)
 
-model.fit(X_train, y_train)
+    test_acc = accuracy_score(y_test, y_pred_test)
+    test_precision = precision_score(y_test, y_pred_test)
+    test_recall = recall_score(y_test, y_pred_test)
+    test_f1 = f1_score(y_test, y_pred_test)
 
-y_pred_test = model.predict(X_test)
+    # Log metrics manually (autolog juga bisa, tapi ini eksplisit)
+    mlflow.log_metric("test_accuracy", test_acc)
+    mlflow.log_metric("test_precision", test_precision)
+    mlflow.log_metric("test_recall", test_recall)
+    mlflow.log_metric("test_f1", test_f1)
 
-test_acc = accuracy_score(y_test, y_pred_test)
-test_precision = precision_score(y_test, y_pred_test)
-test_recall = recall_score(y_test, y_pred_test)
-test_f1 = f1_score(y_test, y_pred_test)
-
-print(f"Accuracy: {test_acc:.4f}")
-print(f"Precision: {test_precision:.4f}")
-print(f"Recall: {test_recall:.4f}")
-print(f"F1-Score: {test_f1:.4f}")
+    print(f"Accuracy: {test_acc:.4f}")
+    print(f"Precision: {test_precision:.4f}")
+    print(f"Recall: {test_recall:.4f}")
+    print(f"F1-Score: {test_f1:.4f}")
 
 print("Training complete")
