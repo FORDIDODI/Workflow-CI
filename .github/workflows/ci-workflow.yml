@@ -50,19 +50,34 @@ jobs:
         run: |
           cd MLProject
           echo "Checking artifacts in $(pwd)/mlruns..."
-          if [ ! -d "mlruns/0" ]; then
-            echo "Training failed: mlruns/0 not found"
-            ls -R mlruns || true
+          
+          # Cari experiment ID pertama yang ditemukan
+          EXP_ID=$(find mlruns -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | head -1)
+          if [ -z "$EXP_ID" ]; then
+            echo "Training failed: no experiment directory found in mlruns"
             exit 1
           fi
-          LATEST_RUN=$(find mlruns/0 -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
-          if [ ! -d "mlruns/0/$LATEST_RUN/artifacts/model" ]; then
-            echo "Model not found in mlruns/0/$LATEST_RUN/artifacts/"
-            ls -R mlruns/0/$LATEST_RUN || true
+
+          echo "Detected experiment ID: $EXP_ID"
+
+          # Cari run ID di dalam experiment
+          RUN_ID=$(find mlruns/$EXP_ID -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | head -1)
+          if [ -z "$RUN_ID" ]; then
+            echo "No runs found in experiment $EXP_ID"
             exit 1
           fi
-          echo "Model found at mlruns/0/$LATEST_RUN/artifacts/model"
-          echo "MODEL_RUN=$LATEST_RUN" >> $GITHUB_ENV
+
+          echo "Detected run ID: $RUN_ID"
+
+          # Verifikasi model artifact
+          if [ ! -d "mlruns/$EXP_ID/$RUN_ID/artifacts/model" ]; then
+            echo "Model not found in mlruns/$EXP_ID/$RUN_ID/artifacts/"
+            ls -R mlruns/$EXP_ID/$RUN_ID || true
+            exit 1
+          fi
+
+          echo "Model found at mlruns/$EXP_ID/$RUN_ID/artifacts/model"
+          echo "MODEL_RUN=$RUN_ID" >> $GITHUB_ENV
 
           
       - name: Upload artifacts
