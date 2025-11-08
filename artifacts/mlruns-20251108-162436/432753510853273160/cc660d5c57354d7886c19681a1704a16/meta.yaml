@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/ASUS/AndroidStudioProjects/Workflow-CI/MLProject/mlruns/432753510853273160/cc660d5c57354d7886c19681a1704a16/artifacts
+end_time: 1762616843325
+entry_point_name: ''
+experiment_id: '432753510853273160'
+lifecycle_stage: active
+run_id: cc660d5c57354d7886c19681a1704a16
+run_name: magnificent-gnat-602
+run_uuid: cc660d5c57354d7886c19681a1704a16
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762616836506
+status: 3
+tags: []
+user_id: ASUS
