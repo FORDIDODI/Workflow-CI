@@ -40,14 +40,7 @@ jobs:
           echo "lifecycle_stage: active" >> mlruns/0/meta.yaml
           chmod -R 777 mlruns
 
-      - name: Debug mlruns
-        if: failure()
-        run: |
-          cd MLProject
-          ls -R mlruns || true
-          cat mlruns/0/meta.yaml || true
-
-
+          
       - name: Train model
         run: |
           cd MLProject
