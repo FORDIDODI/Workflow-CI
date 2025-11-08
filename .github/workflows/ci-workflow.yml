@@ -42,7 +42,7 @@ jobs:
       - name: Verify Model Artifacts
         run: |
           if [ -d "MLProject/mlruns" ]; then
-            echo "✅ MLruns folder created"
+            echo "MLruns folder created"
             ls -la MLProject/mlruns/
             
             # Find latest run
@@ -50,13 +50,13 @@ jobs:
             echo "Latest run ID: $LATEST_RUN"
             
             if [ -d "MLProject/mlruns/0/$LATEST_RUN/artifacts/model" ]; then
-              echo "✅ Model artifact found!"
+              echo "Model artifact found!"
             else
-              echo "❌ Model artifact not found!"
+              echo "Model artifact not found!"
               exit 1
             fi
           else
-            echo "❌ MLruns folder not created!"
+            echo "MLruns folder not created!"
             exit 1
           fi
           
@@ -82,7 +82,7 @@ jobs:
           
           # Add and commit
           git add artifacts/ || true
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Auto-update: Model artifacts from run $(date)" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update: Model artifacts from run $(date)" && git push)
           
       # ========== DOCKER BUILD AND PUSH ==========
       
@@ -154,9 +154,9 @@ jobs:
         if: success()
         run: |
           echo "================================================"
-          echo "✅ CI/CD PIPELINE BERHASIL!"
+          echo "CI/CD PIPELINE BERHASIL!"
           echo "================================================"
-          echo "📦 Model artifacts saved to GitHub"
-          echo "🐳 Docker image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest"
-          echo "🔗 Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model"
+          echo "Model artifacts saved to GitHub"
+          echo "Docker image: ${{ secrets.DOCKER_USERNAME }}/diabetes-model:latest"
+          echo "Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/diabetes-model"
           echo "================================================"
