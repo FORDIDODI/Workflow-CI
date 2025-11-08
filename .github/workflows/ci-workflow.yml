@@ -33,6 +33,7 @@ jobs:
       - name: Setup mlruns
         run: |
           cd MLProject
+          rm -rf mlruns
           mkdir -p mlruns
           chmod -R 777 mlruns
           
