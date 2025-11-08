@@ -29,23 +29,21 @@ jobs:
         run: |
           pip install --upgrade pip setuptools wheel
           pip install mlflow==2.19.0 pandas numpy scikit-learn==1.5.2 matplotlib seaborn
-          
-      - name: Setup mlruns
+
+      - name: Reset MLflow tracking dir
         run: |
           cd MLProject
           rm -rf mlruns
-          mkdir -p mlruns/0
-          echo "artifact_location: $(pwd)/mlruns/0" > mlruns/0/meta.yaml
-          echo "name: Default" >> mlruns/0/meta.yaml
-          echo "lifecycle_stage: active" >> mlruns/0/meta.yaml
+          mkdir mlruns
           chmod -R 777 mlruns
+          echo "Cleaned mlruns directory"
 
           
       - name: Train model
         run: |
           cd MLProject
-          export MLFLOW_TRACKING_URI="file:$(pwd)/mlruns"
-          export MLFLOW_EXPERIMENT_NAME="default"
+          MLFLOW_TRACKING_URI="file:$(pwd)/mlruns" \
+          MLFLOW_EXPERIMENT_NAME="default" \
           mlflow run . --env-manager=local
           
       - name: Verify artifacts
@@ -87,15 +85,21 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           
-      - name: Create Dockerfile
+      - name: Create Dockerfile and prepare model
         run: |
           cd MLProject
+          MODEL_PATH="mlruns/0/${{ env.MODEL_RUN }}/artifacts/model"
+          if [ ! -d "$MODEL_PATH" ]; then
+            echo "Model path not found: $MODEL_PATH"
+            exit 1
+          fi
+          cp -r "$MODEL_PATH" ./model
           cat > Dockerfile << 'EOF'
           FROM python:3.12-slim
           WORKDIR /app
           RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
           RUN pip install --no-cache-dir mlflow==2.19.0 pandas numpy scikit-learn gunicorn
-          COPY mlruns/0/${{ env.MODEL_RUN }}/artifacts/model /app/model
+          COPY model /app/model
           EXPOSE 5001
           CMD ["mlflow", "models", "serve", "-m", "/app/model", "-h", "0.0.0.0", "-p", "5001", "--no-conda"]
           EOF
