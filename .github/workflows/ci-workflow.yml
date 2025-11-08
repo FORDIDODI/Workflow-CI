@@ -39,6 +39,7 @@ jobs:
       - name: Train model
         run: |
           cd MLProject
+          export MLFLOW_TRACKING_URI="file:./mlruns"
           mlflow run . --env-manager=local
           
       - name: Verify artifacts
