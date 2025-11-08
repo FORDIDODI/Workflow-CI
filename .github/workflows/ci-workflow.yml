@@ -43,22 +43,27 @@ jobs:
         run: |
           cd MLProject
           MLFLOW_TRACKING_URI="file:$(pwd)/mlruns" \
-          MLFLOW_EXPERIMENT_NAME="default" \
+          MLFLOW_EXPERIMENT_NAME="Default" \
           mlflow run . --env-manager=local
           
       - name: Verify artifacts
         run: |
           cd MLProject
+          echo "Checking artifacts in $(pwd)/mlruns..."
           if [ ! -d "mlruns/0" ]; then
-            echo "Training failed"
+            echo "Training failed: mlruns/0 not found"
+            ls -R mlruns || true
             exit 1
           fi
           LATEST_RUN=$(find mlruns/0 -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
           if [ ! -d "mlruns/0/$LATEST_RUN/artifacts/model" ]; then
-            echo "Model not found"
+            echo "Model not found in mlruns/0/$LATEST_RUN/artifacts/"
+            ls -R mlruns/0/$LATEST_RUN || true
             exit 1
           fi
+          echo "Model found at mlruns/0/$LATEST_RUN/artifacts/model"
           echo "MODEL_RUN=$LATEST_RUN" >> $GITHUB_ENV
+
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
