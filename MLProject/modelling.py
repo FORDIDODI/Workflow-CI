@@ -82,4 +82,16 @@ with mlflow.start_run():
     print(f"Recall: {test_recall:.4f}")
     print(f"F1-Score: {test_f1:.4f}")
 
+# === Simpan model secara eksplisit ===
+os.makedirs("models", exist_ok=True)
+model_path = "models/model.pkl"
+
+import joblib
+joblib.dump(model, model_path)
+
+# Log model ke MLflow
+mlflow.sklearn.log_model(model, artifact_path="model")
+
+print(f"Model saved locally at {model_path}")
+
 print("Training complete")
