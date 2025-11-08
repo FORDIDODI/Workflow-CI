@@ -29,12 +29,6 @@ jobs:
         run: |
           pip install --upgrade pip setuptools wheel
           pip install mlflow==2.19.0 pandas numpy scikit-learn==1.5.2 matplotlib seaborn
-
-      - name: Reset MLflow tracking dir
-        run: |
-          cd MLProject
-          rm -rf mlruns
-          mkdir mlruns
           
       - name: Train model
         run: |
@@ -136,4 +130,3 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add MLProject/docker_hub_link.txt || true
-          git diff --quiet HEAD || (git commit -m "Update docker info" && git push) || true
