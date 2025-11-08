@@ -34,13 +34,17 @@ jobs:
         run: |
           cd MLProject
           rm -rf mlruns
-          mkdir -p mlruns
+          mkdir -p mlruns/0
+          echo "artifact_location: $(pwd)/mlruns/0" > mlruns/0/meta.yaml
+          echo "name: Default" >> mlruns/0/meta.yaml
+          echo "lifecycle_stage: active" >> mlruns/0/meta.yaml
           chmod -R 777 mlruns
-          
+
       - name: Train model
         run: |
           cd MLProject
-          export MLFLOW_TRACKING_URI="file:./mlruns"
+          export MLFLOW_TRACKING_URI="file:$(pwd)/mlruns"
+          export MLFLOW_EXPERIMENT_NAME="default"
           mlflow run . --env-manager=local
           
       - name: Verify artifacts
