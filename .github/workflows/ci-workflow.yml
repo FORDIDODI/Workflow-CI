@@ -35,50 +35,37 @@ jobs:
           cd MLProject
           rm -rf mlruns
           mkdir mlruns
-          chmod -R 777 mlruns
-          echo "Cleaned mlruns directory"
-
           
       - name: Train model
         run: |
           cd MLProject
-          MLFLOW_TRACKING_URI="file:$(pwd)/mlruns" \
-          MLFLOW_EXPERIMENT_NAME="Default" \
           mlflow run . --env-manager=local
           
       - name: Verify artifacts
         run: |
           cd MLProject
-          echo "Checking artifacts in $(pwd)/mlruns..."
           
-          # Cari experiment ID pertama yang ditemukan
-          EXP_ID=$(find mlruns -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | head -1)
-          if [ -z "$EXP_ID" ]; then
-            echo "Training failed: no experiment directory found in mlruns"
+          EXPERIMENT_DIR=$(find mlruns -mindepth 1 -maxdepth 1 -type d ! -name ".trash" -printf "%f\n" | head -1)
+          
+          if [ -z "$EXPERIMENT_DIR" ]; then
+            echo "No experiment found"
             exit 1
           fi
-
-          echo "Detected experiment ID: $EXP_ID"
-
-          # Cari run ID di dalam experiment
-          RUN_ID=$(find mlruns/$EXP_ID -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | head -1)
+          
+          RUN_ID=$(find mlruns/$EXPERIMENT_DIR -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | head -1)
+          
           if [ -z "$RUN_ID" ]; then
-            echo "No runs found in experiment $EXP_ID"
+            echo "No run found"
             exit 1
           fi
-
-          echo "Detected run ID: $RUN_ID"
-
-          # Verifikasi model artifact
-          if [ ! -d "mlruns/$EXP_ID/$RUN_ID/artifacts/model" ]; then
-            echo "Model not found in mlruns/$EXP_ID/$RUN_ID/artifacts/"
-            ls -R mlruns/$EXP_ID/$RUN_ID || true
+          
+          if [ ! -d "mlruns/$EXPERIMENT_DIR/$RUN_ID/artifacts/model" ]; then
+            echo "Model not found"
             exit 1
           fi
-
-          echo "Model found at mlruns/$EXP_ID/$RUN_ID/artifacts/model"
-          echo "MODEL_RUN=$RUN_ID" >> $GITHUB_ENV
-
+          
+          echo "EXPERIMENT_DIR=$EXPERIMENT_DIR" >> $GITHUB_ENV
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -105,15 +92,10 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           
-      - name: Create Dockerfile and prepare model
+      - name: Prepare Docker build
         run: |
           cd MLProject
-          MODEL_PATH="mlruns/0/${{ env.MODEL_RUN }}/artifacts/model"
-          if [ ! -d "$MODEL_PATH" ]; then
-            echo "Model path not found: $MODEL_PATH"
-            exit 1
-          fi
-          cp -r "$MODEL_PATH" ./model
+          cp -r mlruns/${{ env.EXPERIMENT_DIR }}/${{ env.RUN_ID }}/artifacts/model ./model
           cat > Dockerfile << 'EOF'
           FROM python:3.12-slim
           WORKDIR /app
