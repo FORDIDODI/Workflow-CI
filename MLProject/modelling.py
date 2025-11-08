@@ -42,9 +42,12 @@ print(f"Train: {X_train.shape[0]}, Test: {X_test.shape[0]}")
 
 mlflow.sklearn.autolog()
 
-mlflow.log_param("dataset_name", "diabetes")
-mlflow.log_param("train_size", len(X_train))
-mlflow.log_param("n_features", X.shape[1])
+with mlflow.start_run(nested=True):
+    mlflow.log_param("dataset_name", "diabetes")
+    mlflow.log_param("train_size", len(X_train))
+    mlflow.log_param("test_size_records", len(X_test))  # ganti nama juga agar aman
+    mlflow.log_param("n_features", X.shape[1])
+
 
 print("Training model...")
 model = RandomForestClassifier(
