@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/ASUS/AndroidStudioProjects/Workflow-CI/MLProject/mlruns/0/5db709a5532a478c806941669111db2f/artifacts
+end_time: 1762533063724
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 5db709a5532a478c806941669111db2f
+run_name: intrigued-mule-515
+run_uuid: 5db709a5532a478c806941669111db2f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762533055692
+status: 4
+tags: []
+user_id: ASUS

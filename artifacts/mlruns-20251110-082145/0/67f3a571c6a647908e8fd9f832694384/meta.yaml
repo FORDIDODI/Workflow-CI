@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/ASUS/AndroidStudioProjects/Workflow-CI/MLProject/mlruns/0/67f3a571c6a647908e8fd9f832694384/artifacts
+end_time: 1762533375942
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 67f3a571c6a647908e8fd9f832694384
+run_name: monumental-sheep-624
+run_uuid: 67f3a571c6a647908e8fd9f832694384
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762533367699
+status: 4
+tags: []
+user_id: ASUS

@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/ASUS/AndroidStudioProjects/Workflow-CI/MLProject/mlruns/0/868100cce99c499bbe8a683c79815bfd/artifacts
+end_time: 1762762903200
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 868100cce99c499bbe8a683c79815bfd
+run_name: bold-ox-368
+run_uuid: 868100cce99c499bbe8a683c79815bfd
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1762762896251
+status: 3
+tags: []
+user_id: runner
